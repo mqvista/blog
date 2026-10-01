@@ -1,6 +1,7 @@
 ---
 title: "中国电信VOIP接入FreePbx系统"
 date: 2022-05-25
+lastmod: 2026-10-01
 categories: 
   - "voip"
 tags: 
@@ -8,6 +9,12 @@ tags:
   - "voip"
   - "上海电信"
 ---
+
+> **2026-10-01 更新：IMS 域名由 sh.ctcims.cn 变更为 sh2.ctcims.cn**
+>
+> 上海电信对 IMS 做过割接（大约在2023年底到2024年上半年之间），域名从 `sh.ctcims.cn` 换成了 `sh2.ctcims.cn`，SIP代理也相应变为 `BAC13.bq.sh2.ctcims.cn`。按本文旧版配置的中继会注册不上：旧代理地址对 REGISTER、OPTIONS 一律不回包，抓包只能看到本机不断重发，Asterisk 日志里是 `No response received`。
+>
+> 修改方法是把 dnsmasq 和 Trunk 配置里所有的 `sh.ctcims.cn` 换成 `sh2.ctcims.cn`，鉴权密码不用变。正文中的配置已按新域名更新，截图仍是当时旧域名的，请以文字为准。各人的代理服务器名可能不同，以光猫“宽带电话设置”里显示的为准。
 
 大概在2019年左右，上海电信已经将所有家庭固话都已经替换为VOIP系统，也就是通过光猫的FSX口将传统PSTN系统的电话机接入电信的VOIP系统，而升级VOIP系统对于电信公司而言也是价值大于付出的。传统电话线在维护方面就是一个大头，特别是老旧小区，铜缆电话线的故障率比较高。而现在的光猫+VOIP系统大大减少线路的故障率，一个楼道就一条或两条光缆，再配置光分器就可接入整栋楼的用户。
 
@@ -103,7 +110,7 @@ systemctl restart network 重启网卡，这时候ip ro就可以发现默认网�
 
 4、FreePBX系统设定
 
-在上述系统接口设定完毕后，我们先nslookup我们的SIP代理服务器地址（我这里是bac13.bq.sh.ctcims.cn），会返回找不到结果，问题是在查询dns用的是家庭内网dns(10.11.0.1)，内网dns是没有这个域名解析结果的，需要通过VOIP内网的dhcp获取的dns地址进行查询才可以获取有效数据。
+在上述系统接口设定完毕后，我们先nslookup我们的SIP代理服务器地址（我这里是bac13.bq.sh2.ctcims.cn），会返回找不到结果，问题是在查询dns用的是家庭内网dns(10.11.0.1)，内网dns是没有这个域名解析结果的，需要通过VOIP内网的dhcp获取的dns地址进行查询才可以获取有效数据。
 
 ![](/images/image-18-1024x258.png)
 
@@ -119,8 +126,8 @@ systemctl start dnsmasq 开启dnsmasq服务， systemctl enable dnsmasq 设定dn
 # 使用10.11.0.1作为默认DNS地址
 server=10.11.0.1 
 # SIP代理台服务器通过指定DNS服务器查询解析
-server=/BAC13.bq.sh.ctcims.cn/15.192.252.188    
-server=/BAC13.bq.sh.ctcims.cn/15.192.251.188
+server=/BAC13.bq.sh2.ctcims.cn/15.192.252.188    
+server=/BAC13.bq.sh2.ctcims.cn/15.192.251.188
 ```
 
 ![](/images/image-21-1024x524.png)
@@ -149,11 +156,11 @@ server=/BAC13.bq.sh.ctcims.cn/15.192.251.188
 
 ```
 Username=+8621xxxxxxxx
-Auth username=+8621xxxxxxxx@sh.ctcims.cn
+Auth username=+8621xxxxxxxx@sh2.ctcims.cn
 Secret=xxxxxxxxxx (我这里是20个字符)
 Authentication=Outbound
 Registration=Send
-SIP Server=sh.ctcims.cn
+SIP Server=sh2.ctcims.cn
 SIP Server Port=5060
 ```
 
@@ -163,10 +170,10 @@ SIP Server Port=5060
 
 ```
 Outbound Proxy=sip:SIP_PROXY地址:5060\;lr (注意格式，前后都需要)
-From Domain=sh.ctcims.cn
+From Domain=sh2.ctcims.cn
 From User=+8621xxxxxxxx
-Client URI=sip:+8621xxxxxxxx@sh.ctcims.cn:5060
-AOR=sip:+8621xxxxxxxx@sh.ctcims.cn:5060
+Client URI=sip:+8621xxxxxxxx@sh2.ctcims.cn:5060
+AOR=sip:+8621xxxxxxxx@sh2.ctcims.cn:5060
 Match (Permit)=15.192.0.0/16 (根据实际VOIP内网网段)
 ```
 
@@ -186,10 +193,12 @@ Submit后，可以在"Report"->"Asterisk Info" 内看到Trunk的注册情况
 
 3、SIP Proxy地址一般设定了防Ping，直接ping地址是不会回包的，使用nslookup测试dns解析，使用traceroute测试SIP Proxy路由，检查路由是否从对应VLAN46端口出本地。
 
-4、SIP在注册时候，使用的是sip:+8621xxxxxxxx@sh.ctcims.cn:5060 的request格式向服务器发包注册，若不填写SIP Proxy，则发送请求到sh.ctcims.cn这个服务器地址，若填写SIP Proxy，则发送请求到SIP Proxy的服务器地址。在电信VOIP内网中，是解析不出sh.ctcims.cn这个地址的，所以SIP Server这个必须正确填写，否则无法注册。
+4、SIP在注册时候，使用的是sip:+8621xxxxxxxx@sh2.ctcims.cn:5060 的request格式向服务器发包注册，若不填写SIP Proxy，则发送请求到sh2.ctcims.cn这个服务器地址，若填写SIP Proxy，则发送请求到SIP Proxy的服务器地址。在电信VOIP内网中，是解析不出sh2.ctcims.cn这个地址的，所以SIP Server这个必须正确填写，否则无法注册。
 
 ![](/images/image-29-1024x525.png)
 
 5、在SIP trunk注册不上，可以使用tcp dump抓包，检查sip在注册过程中是否有问题。
+
+6、（2026-10-01补充）如果抓包发现 REGISTER 发出去后完全没有回包，先用VOIP内网的DNS确认代理服务器名是否还有效，例如 nslookup BAC13.bq.sh2.ctcims.cn 15.192.252.188 。正常的代理服务器对未带鉴权的 REGISTER 会回 401，对 OPTIONS 会回 200；已经下线的旧地址则什么都不回。电信VOIP内网的DNS对不存在的域名也是不应答（超时），而不是返回找不到。
 
 最后感谢 [“](http://zhmail.com/2016/10/14/freepbx-13-ctc-sip-account-trunk-setting)[文卓的笔记-中国电信SIP账号在FreePBX 13中的中继设置](http://zhmail.com/2016/10/14/freepbx-13-ctc-sip-account-trunk-setting/)[”](http://zhmail.com/2016/10/14/freepbx-13-ctc-sip-account-trunk-setting) 给我带来不少思路，特别是SIP Proxy方面的问题
